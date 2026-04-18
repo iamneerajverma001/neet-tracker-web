@@ -20,7 +20,7 @@ export default function App() {
   const [openTopicId, setOpenTopicId] = useState<string | null>(null);
 
   const importRef = useRef<HTMLInputElement | null>(null);
-  const topicRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const topicRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     saveDoneMap(done);

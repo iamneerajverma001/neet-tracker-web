@@ -11,7 +11,7 @@ interface TopicCardProps {
   subjectMeta: SubjectMetaMap;
   onToggleOpen: (id: string) => void;
   onToggleDone: (id: string) => void;
-  registerRef: (id: string, el: HTMLDivElement | null) => void;
+  registerRef: (id: string, el: HTMLElement | null) => void;
 }
 
 export function TopicCard({

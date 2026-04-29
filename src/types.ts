@@ -1,7 +1,8 @@
-export type Subject = "physics" | "chemistry";
+export type Subject = "physics" | "chemistry" | "biology";
 export type Tier = 1 | 2 | 3;
 
 export type DoneMap = Record<string, boolean>;
+export type ExpandMap = Record<string, number>; // 0-9, each representing 0-90% progress
 
 export interface Topic {
   id: string;

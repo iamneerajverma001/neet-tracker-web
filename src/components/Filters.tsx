@@ -15,14 +15,16 @@ export function Filters({ subject, tier, search, onSubject, onTier, onSearch }: 
     <section className={styles.filtersWrap}>
       <input
         className={styles.searchInput}
+        aria-label="Search by topic or sub-topic"
         placeholder="Search topic or sub-topic"
         value={search}
         onChange={(e) => onSearch(e.target.value)}
       />
 
       <div className={styles.pillRow}>
-        {(["both", "physics", "chemistry"] as const).map((key) => (
+        {(["both", "physics", "chemistry", "biology"] as const).map((key) => (
           <button
+            type="button"
             key={key}
             className={`${styles.pill} ${subject === key ? styles.pillActive : ""}`}
             onClick={() => onSubject(key)}
@@ -35,6 +37,7 @@ export function Filters({ subject, tier, search, onSubject, onTier, onSearch }: 
       <div className={styles.pillRow}>
         {[0, 1, 2, 3].map((value) => (
           <button
+            type="button"
             key={value}
             className={`${styles.pill} ${tier === value ? styles.pillActive : ""}`}
             onClick={() => onTier(value as Tier | 0)}

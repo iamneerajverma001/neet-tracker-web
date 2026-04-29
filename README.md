@@ -1,3 +1,54 @@
+# NEET Smart Tracker (neet-tracker-web)
+
+This repository contains the NEET Smart Tracker — a small Vite + React + TypeScript app to track NEET study progress.
+
+Quick start
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Run development server
+
+```bash
+npm run dev
+```
+
+3. Build
+
+```bash
+npm run build
+```
+
+Deployment (GitHub Pages)
+
+This project uses a GitHub Actions workflow to build and publish the `dist/` folder to GitHub Pages on push to the `main` branch. After pushing to GitHub, the Pages action will run automatically.
+
+Site URL (after repo creation)
+
+If your GitHub username is `USERNAME` and repo is `neet-tracker-web`, the Pages URL will be:
+
+```
+https://USERNAME.github.io/neet-tracker-web/
+```
+
+If you prefer to push manually instead of letting the assistant create the repo, run:
+
+```bash
+git init
+git add .
+git commit -m "chore: initial commit"
+# Create repo on GitHub then add remote
+git remote add origin https://github.com/<USERNAME>/neet-tracker-web.git
+git branch -M main
+git push -u origin main
+```
+
+Notes
+- The GitHub Actions workflow builds with `npm ci` and `npm run build` and deploys the `dist/` folder to Pages.
+- If you want the repository to be private, edit the repo settings after creation and enable Pages for a private repo (or use a deployment token).
 # NEET Tracker Web App
 
 React + TypeScript + Vite app for NEET Physics/Chemistry progress tracking.

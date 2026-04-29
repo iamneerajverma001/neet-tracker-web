@@ -24,7 +24,7 @@ export function NextTopicCard({ topic, tierLabel, tier, subjectIcon, onDone }: N
             {subjectIcon} {tierLabel} · {topic.tag} · {topic.days} days · {topic.q}
           </p>
         </div>
-        <button className={styles.ctaButton} onClick={() => onDone(topic.id)}>
+        <button type="button" className={styles.ctaButton} onClick={() => onDone(topic.id)}>
           Mark Done
         </button>
       </div>

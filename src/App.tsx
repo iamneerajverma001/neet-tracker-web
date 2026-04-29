@@ -1,42 +1,87 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "./components/ActionBar";
-import { Filters } from "./components/Filters";
 import { FooterStats } from "./components/FooterStats";
 import { HeaderProgress } from "./components/HeaderProgress";
-import { NextTopicCard } from "./components/NextTopicCard";
+import { NextTopicCard } from "./components/NextTopicCard";  
 import { QuickJump } from "./components/QuickJump";
 import { TopicCard } from "./components/TopicCard";
 import { allTopics, subjectMeta, tierMeta } from "./data/trackerData";
 import styles from "./styles/tracker.module.css";
-import type { DoneMap, Subject, Tier } from "./types";
-import { countDone, filterTopics, nextIncomplete, percent } from "./utils/progress";
-import { loadDoneMap, saveDoneMap } from "./utils/storage";
+import type { DoneMap, ExpandMap, Subject, Tier } from "./types";
+import { exportProgressSummaryPdf } from "./utils/pdf";
+import { countDone, nextIncomplete, percent } from "./utils/progress";
+import { clearDoneMap, loadDoneMap, saveDoneMap, loadExpandMap, saveExpandMap } from "./utils/storage";
 
 export default function App() {
-  const [done, setDone] = useState<DoneMap>(() => loadDoneMap());
-  const [subjectFilter, setSubjectFilter] = useState<Subject | "both">("both");
-  const [tierFilter, setTierFilter] = useState<Tier | 0>(0);
-  const [search, setSearch] = useState("");
-  const [openTopicId, setOpenTopicId] = useState<string | null>(null);
+  const subjectOrder: Subject[] = ["physics", "chemistry", "biology"];
 
-  const importRef = useRef<HTMLInputElement | null>(null);
+  const [done, setDone] = useState<DoneMap>(() => loadDoneMap());
+  const [expand, setExpand] = useState<ExpandMap>(() => loadExpandMap());
+  const [openTopicId, setOpenTopicId] = useState<string | null>(null);
+  const [openSubjects, setOpenSubjects] = useState<Record<Subject, boolean>>({
+    physics: false,
+    chemistry: false,
+    biology: false,
+  });
+  const [openTiers, setOpenTiers] = useState<Record<string, boolean>>({});
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
   const topicRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     saveDoneMap(done);
   }, [done]);
 
+  useEffect(() => {
+    saveExpandMap(expand);
+  }, [expand]);
+
   const physicsTopics = useMemo(() => allTopics.filter((topic) => topic.subject === "physics"), []);
   const chemistryTopics = useMemo(() => allTopics.filter((topic) => topic.subject === "chemistry"), []);
+  const biologyTopics = useMemo(() => allTopics.filter((topic) => topic.subject === "biology"), []);
+
+  // Calculate effective progress including expand progress
+  const calcEffectiveProgress = (topics: typeof allTopics) => {
+    let totalProgress = 0;
+    topics.forEach((topic) => {
+      if (done[topic.id]) {
+        totalProgress += 100;
+      } else {
+        totalProgress += Math.min(90, (expand[topic.id] ?? 0) * 10);
+      }
+    });
+    return Math.round(totalProgress / topics.length);
+  };
 
   const totalDone = countDone(done, allTopics);
   const physicsDone = countDone(done, physicsTopics);
   const chemistryDone = countDone(done, chemistryTopics);
-  const overallPct = percent(totalDone, allTopics.length);
+  const biologyDone = countDone(done, biologyTopics);
+  const overallPct = calcEffectiveProgress(allTopics);
+  const physicsEffectivePct = calcEffectiveProgress(physicsTopics);
+  const chemistryEffectivePct = calcEffectiveProgress(chemistryTopics);
+  const biologyEffectivePct = calcEffectiveProgress(biologyTopics);
 
-  const filteredTopics = useMemo(
-    () => filterTopics(allTopics, { subject: subjectFilter, tier: tierFilter, search }),
-    [subjectFilter, tierFilter, search],
+  const tierSummary = useMemo(
+    () =>
+      ([1, 2, 3] as const).map((tier) => {
+        const topics = allTopics.filter((topic) => topic.tier === tier);
+        return {
+          tier,
+          done: countDone(done, topics),
+          total: topics.length,
+        };
+      }),
+    [done],
+  );
+
+  const subjectTopicMap = useMemo(
+    () => ({
+      physics: physicsTopics,
+      chemistry: chemistryTopics,
+      biology: biologyTopics,
+    }),
+    [physicsTopics, chemistryTopics, biologyTopics],
   );
 
   const nextTopic = nextIncomplete(allTopics, done);
@@ -51,17 +96,62 @@ export default function App() {
     [done],
   );
 
-  function toggleDone(id: string) {
+  const toggleDone = useCallback((id: string) => {
     setDone((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
+    // Clear expand progress when marked done
+    if (!done[id]) {
+      setExpand((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  }, [done]);
 
-  function scrollToTopic(id: string) {
+  const toggleExpand = useCallback((id: string) => {
+    setExpand((prev) => {
+      const current = prev[id] ?? 0;
+      if (current < 9) {
+        return { ...prev, [id]: current + 1 };
+      }
+      return prev;
+    });
+  }, []);
+
+  const scrollToTopic = useCallback((id: string) => {
     const el = topicRefs.current[id];
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "center" });
       setOpenTopicId(id);
     }
-  }
+  }, []);
+
+  const toggleOpenTopic = useCallback((id: string) => {
+    setOpenTopicId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const registerTopicRef = useCallback((id: string, el: HTMLElement | null) => {
+    topicRefs.current[id] = el;
+  }, []);
+
+  const toggleSubject = useCallback((subject: Subject) => {
+    setOpenSubjects((prev) => {
+      const nextOpen = !prev[subject];
+
+      if (nextOpen) {
+        const tierKey = `${subject}-1`;
+        setOpenTiers((tiers) => ({ ...tiers, [tierKey]: true }));
+      }
+
+      return { ...prev, [subject]: nextOpen };
+    });
+  }, []);
+
+  const toggleTierSection = useCallback((subject: Subject, tier: Tier) => {
+    const key = `${subject}-${tier}`;
+    setOpenTiers((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   function resetProgress() {
     const ok = window.confirm("Reset all saved progress?");
@@ -69,49 +159,24 @@ export default function App() {
       return;
     }
 
+    clearDoneMap();
     setDone({});
     setOpenTopicId(null);
   }
 
-  function exportProgress() {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      done,
-    };
+  async function exportUiPdf() {
+    if (isExportingPdf) {
+      return;
+    }
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "neet-tracker-progress.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function importProgress(file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result)) as { done?: DoneMap };
-        if (!parsed.done || typeof parsed.done !== "object") {
-          window.alert("Invalid progress file.");
-          return;
-        }
-
-        const nextMap: DoneMap = {};
-        for (const [key, value] of Object.entries(parsed.done)) {
-          if (typeof value === "boolean") {
-            nextMap[key] = value;
-          }
-        }
-
-        setDone(nextMap);
-      } catch {
-        window.alert("Could not import progress. Please select a valid JSON file.");
-      }
-    };
-
-    reader.readAsText(file);
+    setIsExportingPdf(true);
+    try {
+      await exportProgressSummaryPdf(allTopics, done, "neet-progress-report.pdf");
+    } catch {
+      window.alert("Could not export progress report PDF. Please try again.");
+    } finally {
+      setIsExportingPdf(false);
+    }
   }
 
   return (
@@ -122,8 +187,14 @@ export default function App() {
         overallPct={overallPct}
         physicsDone={physicsDone}
         physicsTotal={physicsTopics.length}
+        physicsEffectivePct={physicsEffectivePct}
         chemistryDone={chemistryDone}
         chemistryTotal={chemistryTopics.length}
+        chemistryEffectivePct={chemistryEffectivePct}
+        biologyDone={biologyDone}
+        biologyTotal={biologyTopics.length}
+        biologyEffectivePct={biologyEffectivePct}
+        tierSummary={tierSummary}
       />
 
       <main className={styles.container}>
@@ -135,62 +206,98 @@ export default function App() {
           onDone={toggleDone}
         />
 
-        <Filters
-          subject={subjectFilter}
-          tier={tierFilter}
-          search={search}
-          onSubject={setSubjectFilter}
-          onTier={setTierFilter}
-          onSearch={setSearch}
-        />
-
         <QuickJump entries={firstPendingByTier} onJump={scrollToTopic} />
 
         <ActionBar
           onReset={resetProgress}
-          onExport={exportProgress}
-          onImportClick={() => importRef.current?.click()}
+          onExportPdf={exportUiPdf}
+          isExportingPdf={isExportingPdf}
         />
 
-        <input
-          ref={importRef}
-          type="file"
-          accept="application/json"
-          aria-label="Import saved progress"
-          className={styles.hiddenInput}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              importProgress(file);
-            }
-            e.currentTarget.value = "";
-          }}
-        />
+        {subjectOrder.map((subject) => {
+          const visibleSubjectTopics = allTopics.filter((topic) => topic.subject === subject);
+          if (visibleSubjectTopics.length === 0) {
+            return null;
+          }
 
-        {filteredTopics.length === 0 && (
-          <div className={styles.emptyState}>No topics match your filters. Try a different search.</div>
-        )}
+          const subjectTotal = subjectTopicMap[subject].length;
+          const subjectDoneCount = countDone(done, subjectTopicMap[subject]);
+          const isSubjectOpen = openSubjects[subject];
 
-        {filteredTopics.map((topic) => (
-          <TopicCard
-            key={topic.id}
-            topic={topic}
-            isOpen={openTopicId === topic.id}
-            isDone={!!done[topic.id]}
-            isNext={nextTopic?.id === topic.id}
-            tierMeta={tierMeta}
-            subjectMeta={subjectMeta}
-            onToggleOpen={(id) => setOpenTopicId((prev) => (prev === id ? null : id))}
-            onToggleDone={toggleDone}
-            registerRef={(id, el) => {
-              topicRefs.current[id] = el;
-            }}
-          />
-        ))}
+          return (
+            <section key={subject} className={styles.subjectSectionCard}>
+              <button
+                type="button"
+                className={styles.subjectSectionToggle}
+                onClick={() => toggleSubject(subject)}
+              >
+                <span className={styles.subjectSectionTitle}>
+                  {subjectMeta[subject].icon} {subject.charAt(0).toUpperCase() + subject.slice(1)}
+                </span>
+                <span className={styles.subjectSectionStats}>
+                  {subjectDoneCount}/{subjectTotal} {isSubjectOpen ? "Hide" : "Expand"}
+                </span>
+              </button>
+
+              {isSubjectOpen && (
+                <div className={styles.subjectSectionBody}>
+                  {([1, 2, 3] as const).map((tier) => {
+                    const tierTopics = visibleSubjectTopics.filter((topic) => topic.tier === tier);
+                    if (tierTopics.length === 0) {
+                      return null;
+                    }
+
+                    const tierKey = `${subject}-${tier}`;
+                    const tierOpen = !!openTiers[tierKey];
+                    const tierDone = countDone(done, tierTopics);
+
+                    return (
+                      <section key={tierKey} className={styles.tierSectionCard}>
+                        <button
+                          type="button"
+                          className={styles.tierSectionToggle}
+                          onClick={() => toggleTierSection(subject, tier)}
+                        >
+                          <span>
+                            Tier {tier} - {tierMeta[tier].label}
+                          </span>
+                          <span>
+                            {tierDone}/{tierTopics.length} {tierOpen ? "Hide" : "Expand"}
+                          </span>
+                        </button>
+
+                        {tierOpen && (
+                          <div className={styles.tierSectionBody}>
+                            {tierTopics.map((topic) => (
+                              <TopicCard
+                                key={topic.id}
+                                topic={topic}
+                                isOpen={openTopicId === topic.id}
+                                isDone={!!done[topic.id]}
+                                isNext={nextTopic?.id === topic.id}
+                                expandCount={expand[topic.id] ?? 0}
+                                tierMeta={tierMeta}
+                                subjectMeta={subjectMeta}
+                                onToggleOpen={toggleOpenTopic}
+                                onToggleDone={toggleDone}
+                                onExpand={toggleExpand}
+                                registerRef={registerTopicRef}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        })}
 
         {totalDone === allTopics.length && (
           <section className={styles.doneCard}>
-            <h3>All 33 Topics Completed</h3>
+            <h3>All {allTopics.length} Topics Completed</h3>
             <p>Move to full mocks and revision loops now.</p>
           </section>
         )}

@@ -12,6 +12,7 @@ export function QuickJump({ entries, onJump }: QuickJumpProps) {
       <span className={styles.quickJumpLabel}>Quick Jump:</span>
       {entries.map((entry) => (
         <button
+          type="button"
           key={entry.tier}
           className={styles.quickButton}
           disabled={!entry.topic}

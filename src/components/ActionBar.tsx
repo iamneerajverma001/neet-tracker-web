@@ -2,16 +2,17 @@ import styles from "../styles/tracker.module.css";
 
 interface ActionBarProps {
   onReset: () => void;
-  onExport: () => void;
-  onImportClick: () => void;
+  onExportPdf: () => void;
+  isExportingPdf: boolean;
 }
 
-export function ActionBar({ onReset, onExport, onImportClick }: ActionBarProps) {
+export function ActionBar({ onReset, onExportPdf, isExportingPdf }: ActionBarProps) {
   return (
     <section className={styles.actionBar}>
-      <button className={styles.secondaryButton} onClick={onExport}>Export Progress</button>
-      <button className={styles.secondaryButton} onClick={onImportClick}>Import Progress</button>
-      <button className={styles.secondaryButton} onClick={onReset}>Reset Progress</button>
+      <button type="button" className={styles.secondaryButton} onClick={onExportPdf} disabled={isExportingPdf}>
+        {isExportingPdf ? "Creating PDF Report..." : "Export Progress Report"}
+      </button>
+      <button type="button" className={styles.secondaryButton} onClick={onReset}>Reset Progress</button>
     </section>
   );
 }
